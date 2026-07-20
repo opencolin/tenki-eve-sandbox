@@ -7,8 +7,9 @@
  *   - read / write    -> Tenki data-plane ReadFile/WriteFile (base64 bytes)
  *   - removePath      -> `rm` in the sandbox
  *
- * Relative paths anchor to `workdir` (default `/workspace`, Eve's convention);
- * absolute paths pass through.
+ * Relative paths anchor to `workdir` (default `/home/tenki` — Tenki confines
+ * file I/O to the sandbox user's home; `/workspace` is rejected). Absolute paths
+ * pass through, so agent code hard-coding `/workspace` will fail — use relative paths.
  */
 import type { SandboxProcess, SandboxRunOptions, SandboxSession } from "eve/sandbox";
 import type { TenkiClient } from "./tenki-client.js";
@@ -92,14 +93,20 @@ export function makeSession(
 			env: options.env,
 			timeoutSeconds: maxCommandSeconds,
 		});
-		if (!options.abortSignal) return execP;
 		const signal = options.abortSignal;
-		return Promise.race([
-			execP,
-			new Promise<never>((_, reject) => {
-				signal.addEventListener("abort", () => reject(new Error("tenki backend: command aborted")), { once: true });
-			}),
-		]);
+		const res = signal
+			? await Promise.race([
+					execP,
+					new Promise<never>((_, reject) => {
+						signal.addEventListener("abort", () => reject(new Error("tenki backend: command aborted")), { once: true });
+					}),
+				])
+			: await execP;
+		// Surface a capture-read failure instead of letting it read as exit 0 + empty output.
+		if (res.captureError) {
+			return { ...res, stderr: `${res.stderr}${res.stderr ? "\n" : ""}[tenki: output capture failed: ${res.captureError}]` };
+		}
+		return res;
 	}
 
 	async function readRaw(path: string): Promise<Uint8Array | null> {

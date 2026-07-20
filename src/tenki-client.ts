@@ -90,9 +90,18 @@ export class TenkiClient {
 		this.baseUrl = baseUrl.replace(/\/+$/, "");
 	}
 
-	/** Unary control-plane call. Retries RateLimited responses with exponential backoff. */
+	/**
+	 * Unary control-plane call, with idempotency-aware retry.
+	 *
+	 * A rate-limit (HTTP 429 / `rate_limited`) means the request was REJECTED, so it
+	 * is safe to retry any method. An ambiguous transient (`unavailable` /
+	 * `resource_exhausted`) may have been processed server-side, so we retry it ONLY
+	 * for idempotent methods — never `Create*`, where a lost response after the
+	 * resource was actually created would double-create a billing session/snapshot/volume.
+	 */
 	async control(method: string, body: Record<string, unknown> = {}): Promise<Record<string, any>> {
 		const url = `${this.baseUrl}/${CONTROL_SERVICE}/${method}`;
+		const nonIdempotent = /^Create/.test(method);
 		for (let attempt = 0; ; attempt++) {
 			const res = await fetch(url, {
 				method: "POST",
@@ -104,7 +113,10 @@ export class TenkiClient {
 			const text = await res.text();
 			const parsed = safeJson(text);
 			const code = typeof parsed?.code === "string" ? parsed.code.toLowerCase() : "";
-			if (attempt < MAX_RETRIES && (res.status === 429 || RETRYABLE.has(code))) {
+			const isRateLimit = res.status === 429 || code === "rate_limited" || code === "ratelimited";
+			const isAmbiguousTransient = RETRYABLE.has(code) && !isRateLimit;
+			const shouldRetry = isRateLimit || (isAmbiguousTransient && !nonIdempotent);
+			if (attempt < MAX_RETRIES && shouldRetry) {
 				await sleep(Math.min(BACKOFF_BASE_MS * 2 ** attempt, BACKOFF_CAP_MS));
 				continue;
 			}
