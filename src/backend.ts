@@ -25,7 +25,11 @@ export interface TenkiBackendOptions {
 	apiKey?: string;
 	/** Control-plane base URL. Defaults to TENKI_API_ENDPOINT or https://api.tenki.cloud. */
 	baseUrl?: string;
-	/** Working directory sandboxes anchor relative paths to. Default `/workspace`. */
+	/**
+	 * Working directory sandboxes anchor relative paths to. Default `/home/tenki`
+	 * — Tenki's data plane confines file I/O to the sandbox user's home, so this
+	 * must stay under it (unlike Eve's `/workspace` convention on other backends).
+	 */
 	workdir?: string;
 	/** vCPUs (default 2). */
 	cpuCores?: number;
@@ -60,7 +64,7 @@ export function tenki(options: TenkiBackendOptions = {}): SandboxBackend {
 		throw new Error("tenki backend: no API key. Set TENKI_API_KEY (or pass { apiKey }).");
 	}
 	const client = new TenkiClient(token, options.baseUrl);
-	const workdir = options.workdir ?? "/workspace";
+	const workdir = options.workdir ?? "/home/tenki";
 
 	/** Reattach a still-live session from persisted metadata, else create a fresh one. */
 	async function bootSession(existing?: Record<string, unknown>): Promise<string> {

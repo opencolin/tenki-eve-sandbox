@@ -27,7 +27,7 @@ export TENKI_API_KEY=tk_your_key_here    # or pass { apiKey } to tenki()
 tenki({
   apiKey,               // default: TENKI_API_KEY / TENKI_AUTH_TOKEN
   baseUrl,              // default: https://api.tenki.cloud
-  workdir,              // default: /workspace (anchor for relative paths)
+  workdir,              // default: /home/tenki (Tenki confines file I/O to $HOME)
   cpuCores,             // default: 2
   memoryMb,             // default: 4096
   diskSizeGb,
@@ -57,7 +57,9 @@ The Tenki wire client is ported from the live-verified [n8n node](https://github
 
 ## Status & known limits (v0.1)
 
-- **Type-verified against Eve's real interface:** `defineSandbox({ backend: tenki() })` compiles against Eve v0.25's published types. The underlying Tenki operations (create / exec / files) are live-verified. End-to-end runtime testing inside a full Eve agent loop is in progress — **treat v0.1 as early.**
+- **Type-verified:** `defineSandbox({ backend: tenki() })` compiles against Eve v0.25's published types (direct and lazy-factory forms).
+- **Runtime-verified against live Tenki:** driving the backend exactly as Eve's runtime does — `create()` → `session.run()` → text + binary `read`/`write` → missing-file-returns-`null` → `shutdown()` — passes end-to-end against a real microVM (`scripts/verify-eve.mjs`). The remaining gap is a full LLM-in-the-loop `eve dev` turn (the model *choosing* to call the sandbox); the sandbox integration itself is verified.
+- **Workdir is `/home/tenki`, not `/workspace`.** Tenki confines file I/O to the sandbox user's home, so relative paths anchor there (other Eve backends use `/workspace`). Override with `workdir`. Agents that hard-code `/workspace` should use relative paths instead.
 - **`spawn` is not incrementally streaming.** Tenki returns command output over HTTP after completion, so `spawn` runs to completion and then exposes the buffered stdout/stderr as streams. `run` (the common path) works exactly as expected; truly interactive long-running processes are a roadmap item (needs a Connect/gRPC streaming transport).
 - **No template prewarm yet.** Every session boots fresh from the base runtime; `bootstrap()` snapshots aren't captured into Tenki templates yet. Roadmap.
 - **Network policy is fixed at creation** (`allowInbound`/`allowOutbound`); runtime `setNetworkPolicy()` throws, like Eve's just-bash backend.
