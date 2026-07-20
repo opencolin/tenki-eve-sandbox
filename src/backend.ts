@@ -37,10 +37,12 @@ export interface TenkiBackendOptions {
 	memoryMb?: number;
 	/** Disk in GB. */
 	diskSizeGb?: number;
-	/** Hard lifetime cap in seconds. */
+	/** Hard lifetime cap in seconds (default 14400 = 4h — a billing backstop). */
 	maxDurationSeconds?: number;
-	/** Reap after N idle minutes. */
+	/** Reap after N idle minutes (default 30 — a billing backstop). */
 	idleTimeoutMinutes?: number;
+	/** Per-command timeout in seconds (default 600). Bounds any single run/spawn so a hung command can't bill forever. */
+	maxCommandSeconds?: number;
 	/** Allow outbound networking (off by default). */
 	allowOutbound?: boolean;
 	/** Allow inbound networking (off by default). */
@@ -89,8 +91,11 @@ export function tenki(options: TenkiBackendOptions = {}): SandboxBackend {
 			cpuCores: options.cpuCores ?? 2,
 			memoryMb: options.memoryMb ?? 4096,
 			...(options.diskSizeGb ? { diskSizeGb: options.diskSizeGb } : {}),
-			...(options.maxDurationSeconds ? { maxDuration: `${options.maxDurationSeconds}s` } : {}),
-			...(options.idleTimeoutMinutes ? { idleTimeoutMinutes: options.idleTimeoutMinutes } : {}),
+			// Billing safety net: ALWAYS cap idle + lifetime. If the Eve server dies
+			// before shutdown()/PauseSession runs, these guards reap the microVM
+			// instead of billing it forever (a per-second product). Callers can raise them.
+			idleTimeoutMinutes: options.idleTimeoutMinutes ?? 30,
+			maxDuration: `${options.maxDurationSeconds ?? 14400}s`,
 			...(options.allowOutbound ? { allowOutbound: true } : {}),
 			...(options.allowInbound ? { allowInbound: true } : {}),
 			...(options.env && Object.keys(options.env).length ? { env: options.env } : {}),
@@ -119,7 +124,7 @@ export function tenki(options: TenkiBackendOptions = {}): SandboxBackend {
 
 		async create(input: SandboxBackendCreateInput): Promise<SandboxBackendHandle> {
 			const sessionId = await bootSession(input.existingMetadata);
-			const session = makeSession(client, sessionId, workdir);
+			const session = makeSession(client, sessionId, workdir, options.maxCommandSeconds ?? 600);
 			const handle: SandboxBackendHandle = {
 				session,
 				useSessionFn: async () => session,

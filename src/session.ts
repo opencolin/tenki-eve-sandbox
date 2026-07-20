@@ -69,9 +69,38 @@ function applyLineRange(text: string, opts: { startLine?: number; endLine?: numb
  * Build the full Eve `SandboxSession` for a live Tenki session id.
  * `workdir` is the anchor for relative paths.
  */
-export function makeSession(client: TenkiClient, sessionId: string, workdir: string): SandboxSession {
-	const root = workdir.replace(/\/+$/, "") || "/workspace";
+export function makeSession(
+	client: TenkiClient,
+	sessionId: string,
+	workdir: string,
+	maxCommandSeconds = 600,
+): SandboxSession {
+	const root = workdir.replace(/\/+$/, "") || "/home/tenki";
 	const resolvePath = (p: string): string => (p.startsWith("/") ? p : `${root}/${p}`);
+
+	/**
+	 * Run a command with a billing-bounded timeout and Eve abort support.
+	 * The per-command timeout is enforced server-side (Tenki kills the command),
+	 * so a hung command can't bill forever; the abortSignal lets an Eve turn-abort
+	 * hand control back promptly.
+	 */
+	async function runExec(options: SandboxRunOptions) {
+		if (options.abortSignal?.aborted) throw new Error("tenki backend: command aborted before start");
+		const execP = client.execCaptured(sessionId, "sh", {
+			args: ["-c", options.command],
+			cwd: options.workingDirectory ?? root,
+			env: options.env,
+			timeoutSeconds: maxCommandSeconds,
+		});
+		if (!options.abortSignal) return execP;
+		const signal = options.abortSignal;
+		return Promise.race([
+			execP,
+			new Promise<never>((_, reject) => {
+				signal.addEventListener("abort", () => reject(new Error("tenki backend: command aborted")), { once: true });
+			}),
+		]);
+	}
 
 	async function readRaw(path: string): Promise<Uint8Array | null> {
 		try {
@@ -93,11 +122,7 @@ export function makeSession(client: TenkiClient, sessionId: string, workdir: str
 	}
 
 	async function spawn(options: SandboxRunOptions): Promise<SandboxProcess> {
-		const res = await client.execCaptured(sessionId, "sh", {
-			args: ["-c", options.command],
-			cwd: options.workingDirectory ?? root,
-			env: options.env,
-		});
+		const res = await runExec(options);
 		return {
 			stdout: stringToStream(res.stdout),
 			stderr: stringToStream(res.stderr),
@@ -112,11 +137,7 @@ export function makeSession(client: TenkiClient, sessionId: string, workdir: str
 		id: sessionId,
 		resolvePath,
 		async run(options) {
-			const res = await client.execCaptured(sessionId, "sh", {
-				args: ["-c", options.command],
-				cwd: options.workingDirectory ?? root,
-				env: options.env,
-			});
+			const res = await runExec(options);
 			return { exitCode: res.exitCode, stdout: res.stdout, stderr: res.stderr };
 		},
 		spawn,
