@@ -60,7 +60,8 @@ function applyLineRange(text: string, opts: { startLine?: number; endLine?: numb
 	if (opts.startLine === undefined && opts.endLine === undefined) return text;
 	const lines = text.split(/(?<=\n)/);
 	const total = lines.length;
-	const start = opts.startLine ?? 1;
+	// Clamp startLine to >=1: a 0/negative value must not become slice(-1) (the LAST line).
+	const start = Math.max(1, opts.startLine ?? 1);
 	const end = Math.min(opts.endLine ?? total, total);
 	if (start > total) return "";
 	return lines.slice(start - 1, end).join("");
