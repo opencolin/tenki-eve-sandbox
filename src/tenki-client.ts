@@ -243,7 +243,10 @@ export class TenkiClient {
 
 		const execLine = [command, ...(opts.args ?? [])].map(shellQuote).join(" ");
 		const cd = opts.cwd && opts.cwd.trim() ? `cd ${shellQuote(opts.cwd.trim())} && ` : "";
-		const script = `${cd}${execLine} > ${outPath} 2> ${errPath}`;
+		// Group so the redirects capture a `cd` failure too — otherwise a bad cwd
+		// exits non-zero with the error escaping to the uncaptured outer shell,
+		// leaving BOTH stdout and stderr empty (a confusing silent failure).
+		const script = `{ ${cd}${execLine} ; } > ${outPath} 2> ${errPath}`;
 
 		const body: Record<string, unknown> = { sessionId, command: "sh", args: ["-c", script] };
 		if (opts.env && Object.keys(opts.env).length) body.env = opts.env;
