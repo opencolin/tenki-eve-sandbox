@@ -1,0 +1,45 @@
+{
+  "name": "tenki-eve-sandbox",
+  "version": "0.1.0",
+  "description": "Tenki sandbox backend for Vercel Eve — run your Eve agents on Tenki Cloud microVMs (boot ~2s, per-second billing).",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "eve",
+    "vercel",
+    "tenki",
+    "sandbox",
+    "sandbox-backend",
+    "microvm",
+    "ai-agents",
+    "agent"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "eve": ">=0.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "eve": "^0.25.3",
+    "typescript": "^5.9.3"
+  }
+}
