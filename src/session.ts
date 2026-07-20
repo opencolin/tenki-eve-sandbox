@@ -78,9 +78,13 @@ export function makeSession(client: TenkiClient, sessionId: string, workdir: str
 			const resp = await client.data(sessionId, "ReadFile", { path });
 			const b64 = (resp.content ?? resp.data ?? resp.file?.content ?? "") as string;
 			return b64 ? new Uint8Array(Buffer.from(b64, "base64")) : new Uint8Array(0);
-		} catch {
-			// Missing file (or unreadable) → null, per Eve's contract for read*.
-			return null;
+		} catch (e) {
+			// Only a genuine "file not found" maps to null (Eve's contract for read*).
+			// Tenki surfaces that as a 404 ("no such file or directory"). Any other
+			// failure (network, auth, permission) must propagate, not masquerade as missing.
+			const msg = (e as Error)?.message ?? "";
+			if (/\(404\)|no such file|not found|does not exist/i.test(msg)) return null;
+			throw e;
 		}
 	}
 
