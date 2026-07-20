@@ -108,8 +108,12 @@ export function tenki(options: TenkiBackendOptions = {}): SandboxBackend {
 		const sessionId = (session.id ?? created.sessionId) as string | undefined;
 		if (!sessionId) throw new Error("tenki backend: CreateSession returned no session id.");
 		await client.waitForState(sessionId, "RUNNING");
-		// Ensure the working directory exists so relative paths resolve.
-		await client.execCaptured(sessionId, "mkdir", { args: ["-p", workdir] });
+		// Ensure the working directory exists so relative paths resolve. Fail loudly if
+		// it can't be created — otherwise every later relative-path op fails cryptically.
+		const mk = await client.execCaptured(sessionId, "mkdir", { args: ["-p", workdir] });
+		if (!mk.ok) {
+			throw new Error(`tenki backend: could not create workdir ${workdir} (exit ${mk.exitCode}): ${mk.stderr.trim() || mk.captureError || "unknown"}`);
+		}
 		return sessionId;
 	}
 

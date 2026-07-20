@@ -125,7 +125,22 @@ export function makeSession(
 	}
 
 	async function writeRaw(path: string, bytes: Uint8Array): Promise<void> {
-		await client.data(sessionId, "WriteFile", { path, content: Buffer.from(bytes).toString("base64") });
+		const content = Buffer.from(bytes).toString("base64");
+		try {
+			await client.data(sessionId, "WriteFile", { path, content });
+		} catch (e) {
+			// Eve's writeFile contract creates parent dirs recursively; Tenki's WriteFile
+			// may not. On a missing-directory failure, create the parent tree and retry once
+			// (agents write nested paths like src/index.ts constantly).
+			const msg = (e as Error)?.message ?? "";
+			const slash = path.lastIndexOf("/");
+			if (slash > 0 && /no such file|not a directory|does not exist|\(404\)/i.test(msg)) {
+				await client.execCaptured(sessionId, "mkdir", { args: ["-p", path.slice(0, slash)] });
+				await client.data(sessionId, "WriteFile", { path, content });
+			} else {
+				throw e;
+			}
+		}
 	}
 
 	async function spawn(options: SandboxRunOptions): Promise<SandboxProcess> {
@@ -177,7 +192,12 @@ export function makeSession(
 		async removePath(options) {
 			const flags = `-${options.recursive ? "r" : ""}${options.force ? "f" : ""}`;
 			const args = flags === "-" ? [resolvePath(options.path)] : [flags, resolvePath(options.path)];
-			await client.execCaptured(sessionId, "rm", { args });
+			const res = await client.execCaptured(sessionId, "rm", { args });
+			// Honor Eve's contract: a failed remove must throw, not silently report success.
+			// (`force` already suppresses missing-path errors at the rm level.)
+			if (!res.ok) {
+				throw new Error(`tenki backend: removePath(${options.path}) failed (exit ${res.exitCode}): ${res.stderr.trim() || res.captureError || "unknown"}`);
+			}
 		},
 	};
 }
