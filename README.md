@@ -53,7 +53,7 @@ Eve backends implement a small two-phase contract (`prewarm` at build time, `cre
 | `removePath` | `rm` in the sandbox |
 | session lifecycle | `CreateSession` → `PauseSession`/`ResumeSession` (durable reattach) → per-session credential for the data plane |
 
-The Tenki wire client is ported from the live-verified [n8n node](https://github.com/opencolin/n8n-nodes-tenki) and shared with [tenki-mcp](https://github.com/opencolin/tenki-mcp).
+The Tenki wire client is ported from the live-verified [n8n node](https://github.com/opencolin/n8n-nodes-tenki) and shared with [tenki-mcp](https://github.com/LuxorLabs/tenki-mcp).
 
 ## Status & known limits (v0.1)
 
@@ -73,7 +73,7 @@ The Tenki wire client is ported from the live-verified [n8n node](https://github
 
 ## Related
 
-- [tenki-mcp](https://github.com/opencolin/tenki-mcp) — Tenki as an MCP server for any agent
+- [tenki-mcp](https://github.com/LuxorLabs/tenki-mcp) — Tenki as an MCP server for any agent
 - [n8n-nodes-tenki](https://github.com/opencolin/n8n-nodes-tenki) — Tenki as an n8n node
 - [Tenki Cloud](https://tenki.cloud) · [Vercel Eve](https://vercel.com/eve)
 
